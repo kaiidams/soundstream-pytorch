@@ -238,7 +238,7 @@ class ResidualVectorQuantizer(nn.Module):
         # input: [..., chennel]
         if self.training:
             # Enabling bitrate scalability with quantizer dropout
-            n = random.randrange(1, self.num_quantizers)
+            n = random.randint(1, self.num_quantizers)
         else:
             n = self.num_quantizers
         codes = []
