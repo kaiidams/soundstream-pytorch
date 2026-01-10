@@ -205,7 +205,7 @@ class Decoder(nn.Module):
 class ResidualVectorQuantizer(nn.Module):
     weight: torch.Tensor
     running_mean: torch.Tensor
-    code_count: torch.Tensor
+    code_relative_frequency: torch.Tensor
 
     def __init__(
         self,
@@ -222,7 +222,7 @@ class ResidualVectorQuantizer(nn.Module):
         self.embedding_dim = embedding_dim
         self.register_buffer("weight", torch.empty(num_quantizers, num_embeddings, embedding_dim))
         self.register_buffer("running_mean", torch.empty(num_quantizers, num_embeddings, embedding_dim))
-        self.register_buffer("code_count", torch.empty(num_quantizers, num_embeddings))
+        self.register_buffer("code_relative_frequency", torch.empty(num_quantizers, num_embeddings))
         self.decay = decay
         self.eps = eps
         self.code_replace_threshold = code_replace_threshold
@@ -231,7 +231,7 @@ class ResidualVectorQuantizer(nn.Module):
     def reset_parameters(self) -> None:
         init.uniform_(self.weight)
         self.running_mean[:] = self.weight
-        init.ones_(self.code_count)
+        init.constant_(self.code_relative_frequency, 1 / self.num_embeddings)
 
     @torch.cuda.amp.autocast(enabled=False)
     def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, List[torch.Tensor]]:
@@ -254,7 +254,7 @@ class ResidualVectorQuantizer(nn.Module):
                 r = r - F.embedding(k, w)
         quantized = input - r
         commitment_loss = torch.mean(torch.square(input - quantized.detach()))
-        self.weight.data[:] = self.running_mean / torch.unsqueeze(self.eps + self.code_count, dim=-1)
+        self.weight.data[:] = self.running_mean / torch.unsqueeze(self.eps + self.code_relative_frequency, dim=-1)
         return quantized, torch.stack(codes, input.ndim - 1), commitment_loss
 
     def dequantize(self, input: torch.Tensor, n: Optional[int] = None) -> torch.Tensor:
@@ -276,9 +276,9 @@ class ResidualVectorQuantizer(nn.Module):
         # 2.1 Vector Quantized Variational AutoEncode
 
         # k: [...]
-        one_hot_k = F.one_hot(torch.flatten(k), self.num_embeddings).type_as(self.code_count)
-        code_count_update = torch.mean(one_hot_k, dim=0)
-        self.code_count[i].lerp_(code_count_update, 1 - self.decay)
+        one_hot_k = F.one_hot(torch.flatten(k), self.num_embeddings).type_as(self.code_relative_frequency)
+        code_relative_frequency_update = torch.mean(one_hot_k, dim=0)
+        self.code_relative_frequency[i].lerp_(code_relative_frequency_update, 1 - self.decay)
 
         # r: [..., embedding_dim]
         r = r.reshape(-1, self.embedding_dim)
@@ -294,21 +294,21 @@ class ResidualVectorQuantizer(nn.Module):
         # The original paper replaces with an input frame randomly
         # sampled within the current batch.
         # Here we replace with random average of running mean instead.
-        num_replaced = torch.sum(self.code_count < self.code_replace_threshold).item()
+        num_replaced = torch.sum(self.code_relative_frequency < self.code_replace_threshold).item()
         if num_replaced > 0:
             for i in range(self.num_quantizers):
-                mask = self.code_count[i] < self.code_replace_threshold
+                mask = self.code_relative_frequency[i] < self.code_replace_threshold
                 # mask: [num_quantizers, num_embeddings]
-                w = torch.rand_like(self.code_count[i])
+                w = torch.rand_like(self.code_relative_frequency[i])
                 w /= torch.sum(w)
                 self.running_mean[i, mask] = w.type_as(self.running_mean) @ self.running_mean[i]
-                self.code_count[i, mask] = w.type_as(self.code_count) @ self.code_count[i]
+                self.code_relative_frequency[i, mask] = w.type_as(self.code_relative_frequency) @ self.code_relative_frequency[i]
 
         return num_replaced
 
     @torch.no_grad()
     def calc_entropy(self) -> float:
-        p = self.code_count / (self.eps + torch.sum(self.code_count, dim=-1, keepdim=True))
+        p = self.code_relative_frequency / (self.eps + torch.sum(self.code_relative_frequency, dim=-1, keepdim=True))
         return -torch.sum(torch.log(p) * p).item() / self.num_quantizers
 
 
@@ -443,6 +443,20 @@ class ReconstructionLoss2(nn.Module):
         return loss
 
 
+def _migrate_state_dict(module, state_dict, *args, **kwargs):
+    old_key = "quantizer.code_count"
+    new_key = "quantizer.code_relative_frequency"
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        if k == old_key:
+            # https://github.com/kaiidams/soundstream-pytorch/issues/8
+            k = new_key
+            v[-1, :] /= torch.sum(v[-1, :])
+        new_state_dict[k] = v
+    state_dict.clear()
+    state_dict.update(new_state_dict)
+
+
 class StreamableModel(pl.LightningModule):
     def __init__(
         self,
@@ -468,7 +482,8 @@ class StreamableModel(pl.LightningModule):
         self.encoder = Encoder(n_channels, padding)
         self.decoder = Decoder(n_channels, padding)
         self.quantizer = ResidualVectorQuantizer(
-            num_quantizers, num_embeddings, n_channels * 16)
+            num_quantizers, num_embeddings, n_channels * 16,
+            code_replace_threshold=0.1 / num_embeddings)
 
         self.wave_discriminators = nn.ModuleList([
             WaveDiscriminator(resolution=1),
@@ -477,6 +492,7 @@ class StreamableModel(pl.LightningModule):
         ])
         self.rec_loss = ReconstructionLoss()
         self.stft_discriminator = STFTDiscriminator()
+        self.register_load_state_dict_pre_hook(_migrate_state_dict)
 
     def configure_optimizers(self):
         lr = self.hparams.lr
