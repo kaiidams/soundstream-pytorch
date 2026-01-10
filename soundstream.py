@@ -248,13 +248,13 @@ class ResidualVectorQuantizer(nn.Module):
                 w = self.weight[i]
                 # r: [..., num_embeddings]
                 dist = torch.cdist(r, w)
-                k = torch.argmin(dist, axis=-1)
+                k = torch.argmin(dist, dim=-1)
                 codes.append(k)
                 self._update_averages(i, r, k)
                 r = r - F.embedding(k, w)
         quantized = input - r
         commitment_loss = torch.mean(torch.square(input - quantized.detach()))
-        self.weight.data[:] = self.running_mean / torch.unsqueeze(self.eps + self.code_count, axis=-1)
+        self.weight.data[:] = self.running_mean / torch.unsqueeze(self.eps + self.code_count, dim=-1)
         return quantized, torch.stack(codes, input.ndim - 1), commitment_loss
 
     def dequantize(self, input: torch.Tensor, n: Optional[int] = None) -> torch.Tensor:
@@ -277,7 +277,7 @@ class ResidualVectorQuantizer(nn.Module):
 
         # k: [...]
         one_hot_k = F.one_hot(torch.flatten(k), self.num_embeddings).type_as(self.code_count)
-        code_count_update = torch.mean(one_hot_k, axis=0)
+        code_count_update = torch.mean(one_hot_k, dim=0)
         self.code_count[i].lerp_(code_count_update, 1 - self.decay)
 
         # r: [..., embedding_dim]
@@ -308,7 +308,7 @@ class ResidualVectorQuantizer(nn.Module):
 
     @torch.no_grad()
     def calc_entropy(self) -> float:
-        p = self.code_count / (self.eps + torch.sum(self.code_count, axis=-1, keepdim=True))
+        p = self.code_count / (self.eps + torch.sum(self.code_count, dim=-1, keepdim=True))
         return -torch.sum(torch.log(p) * p).item() / self.num_quantizers
 
 
@@ -642,8 +642,8 @@ class KMeanCodebookInitCallback(pl.Callback):
         input = batch[:, None, :].to(model.device)
         with torch.no_grad():
             x = torch.flatten(model.encoder(input))
-            mean = torch.mean(x, axis=0)
-            std = torch.std(x, axis=0)
+            mean = torch.mean(x, dim=0)
+            std = torch.std(x, dim=0)
             torch.nn.init.normal_(model.quantizer.weight, mean=mean, std=std)
         print(f"KMeanCodebookInitCallback {mean} {std}")
 
