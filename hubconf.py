@@ -47,7 +47,7 @@ def soundstream_16khz(pretrained=False, **kwargs):
     """
     # Call the model, load pretrained weights
     model = EncoderDecoder()
-    state_dict = torch.hub.load_state_dict_from_url("https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.0/soundstream_16khz-20230425.ckpt", map_location='cpu')
+    state_dict = torch.hub.load_state_dict_from_url("https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.1/soundstream_16khz-20260209.ckpt", map_location='cpu')
     model.load_state_dict(state_dict['state_dict'], strict=False)
     model.eval()
     return model

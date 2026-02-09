@@ -24,6 +24,6 @@ Audio references are sampled from LibriSpeech test-clean.
 
 |Reference|SoundStream|
 |---|---|
-[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.0/6829_68769_6829-68769-0006.in.wav)|[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.0/6829_68769_6829-68769-0006.out.wav)
-[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.0/8230_279154_8230-279154-0000.in.wav)|[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.0/8230_279154_8230-279154-0000.out.wav)
-[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.0/908_157963_908-157963-0028.in.wav)|[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.0/908_157963_908-157963-0028.out.wav)
+[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.0/6829_68769_6829-68769-0006.in.wav)|[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.1/6829_68769_6829-68769-0006.out.wav)
+[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.0/8230_279154_8230-279154-0000.in.wav)|[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.1/8230_279154_8230-279154-0000.out.wav)
+[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.0/908_157963_908-157963-0028.in.wav)|[audio link](https://github.com/kaiidams/soundstream-pytorch/releases/download/v1.1/908_157963_908-157963-0028.out.wav)
